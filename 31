@@ -1,0 +1,83 @@
+import os
+from tkinter import Tk, filedialog
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+
+
+def generate_key(password: str, salt: bytes) -> bytes:
+    """Генерує AES-ключ із пароля за допомогою PBKDF2."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,  # 256 біт
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    return kdf.derive(password.encode())
+
+
+def encrypt_file(input_file: str, output_file: str, password: str):
+    """Шифрує текстовий файл AES-GCM і зберігає результат у двійковому файлі."""
+    # Читання вмісту вхідного файлу
+    with open(input_file, 'rb') as f:
+        plaintext = f.read()
+   
+    # Генерація випадкового ключа
+    salt = os.urandom(16)  # Сіль для PBKDF2
+    key = generate_key(password, salt)
+   
+    # Генерація випадкового nonce (IV)
+    nonce = os.urandom(12)
+   
+    # Шифрування за допомогою AES-GCM
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)  # None — додаткові дані (AAD)
+
+
+    # Збереження результату у вихідному файлі
+    with open(output_file, 'wb') as f:
+        # Структура файлу: salt | nonce | ciphertext
+        f.write(salt + nonce + ciphertext)
+
+
+    # Отримання тегу автентифікації
+    tag = ciphertext[-16:]  # Останні 16 байт — тег
+    print(f"Файл зашифровано. Тег автентифікації: {tag.hex()}")
+
+
+def main():
+    # Створення вікна вибору файлів
+    root = Tk()
+    root.withdraw()  # Приховати основне вікно
+
+
+    # Вибір вхідного файлу
+    input_file = filedialog.askopenfilename(title="Виберіть файл для шифрування")
+    if not input_file:
+        print("Файл не вибрано. Завершення програми.")
+        return
+
+
+    # Вибір місця для збереження вихідного файлу
+    output_file = filedialog.asksaveasfilename(
+        title="Збережіть зашифрований файл",
+        defaultextension=".bin",
+        filetypes=[("Binary files", "*.bin"), ("All files", "*.*")]
+    )
+    if not output_file:
+        print("Місце для збереження не вибрано. Завершення програми.")
+        return
+
+
+    # Запит пароля
+    password = input("Введіть пароль для шифрування: ")
+
+
+    # Шифрування файлу
+    encrypt_file(input_file, output_file, password)
+
+
+if __name__ == "__main__":
+    main()
